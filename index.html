@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<base target="_top">
+<title>เช็คชื่อผู้เข้าอบรม</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600&family=Prompt:wght@600&display=swap">
+<style>
+:root{--bg:#f3f6f8;--surface:#fff;--ink:#12263a;--muted:#5b6d7e;--line:#d9e1e8;--accent:#0b6e8a;--accent-ink:#fff;--accent-soft:#e1f0f5;--ok:#17794a;--ok-soft:#e1f3e9;--warn:#9a6200;--warn-soft:#fdf1d8;--bad:#b3261e;--bad-soft:#fbe4e2}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1a24;--surface:#152634;--ink:#e6eef4;--muted:#93a5b5;--line:#27404f;--accent:#4cb8d6;--accent-ink:#06222c;--accent-soft:#16384a;--ok:#5fcf93;--ok-soft:#14372a;--warn:#f0b650;--warn-soft:#3b2f13;--bad:#ff8a80;--bad-soft:#40201e;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 'Noto Sans Thai',system-ui,sans-serif;padding:0 max(16px,env(safe-area-inset-left)) 40px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:520px;margin:0 auto}
+header{padding:22px 0 16px}
+.kicker{font-size:12px;letter-spacing:.06em;color:var(--accent);font-weight:500;margin:0 0 8px}
+h1{font:600 clamp(20px,5.2vw,26px)/1.3 'Prompt','Noto Sans Thai',sans-serif;margin:0 0 8px;text-wrap:balance}
+.meta{color:var(--muted);font-size:14px;margin:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:18px}
+label,.lbl{display:block;font-weight:500;font-size:14px;margin-bottom:6px}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-height:46px}
+input[readonly],select:disabled{background:var(--accent-soft);border-color:transparent;opacity:1;color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{font-size:13.5px;margin:6px 0 0;color:var(--muted)}.hint.ok{color:var(--ok)}.hint.bad{color:var(--warn);font-weight:500}
+.sug{margin:6px 0 0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.sug button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);color:var(--ink);padding:10px 12px;min-height:44px;font:inherit;cursor:pointer}
+.sug button:last-child{border-bottom:0}.sug small{color:var(--muted);display:block;font-size:12.5px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg label{margin:0;text-align:center;padding:12px 8px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--bg);font-weight:500}
+.seg input:checked+label{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.panel{border-radius:8px;padding:12px 14px;font-size:14.5px;background:var(--accent-soft)}
+.panel.ok{background:var(--ok-soft);color:var(--ok)}.panel.warn{background:var(--warn-soft);color:var(--warn)}
+.panel+.panel{margin-top:8px}
+button.main,button.ghost{font:500 16px 'Noto Sans Thai',sans-serif;min-height:48px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:0 18px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button[disabled]{opacity:.45;cursor:not-allowed}
+.done{text-align:center;align-items:center;gap:10px}.done h2{font:600 22px 'Prompt','Noto Sans Thai',sans-serif;margin:0}
+.err{color:var(--bad);font-size:14px;margin:0}
+</style></head>
+<body><div class="wrap">
+<header><p class="kicker">วิทยาลัยเทคโนโลยีชลบุรี · ใบลงทะเบียน</p><h1 id="title">กำลังโหลด…</h1><p class="meta" id="when"></p></header>
+<main id="view"></main></div>
+
+<script>
+/* ถ้าโฮสต์หน้านี้ที่อื่น (ไม่ใช่ใน Apps Script) ให้ใส่ URL ของ Web App ที่ลงท้าย /exec */
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxr9_48gYPSslkOZjU0IZ77hIpMfZ8oaZj1C4AN41suVtK7Fy23VYWczjZwJ43RFuzZ_w/exec';
+
+const REASONS=['ลาป่วย/กิจ','ไปราชการ','ติดภารกิจ','อื่นๆ'];
+const NEW_GROUP='__new__';
+const $=(s,e=document)=>e.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const key=s=>String(s||'').replace(/\s+/g,'');
+const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()+543} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const OPENED=new Date();
+
+/* ---- เรียกเซิร์ฟเวอร์ ---- */
+function call(fn,arg){
+  if(window.google&&google.script&&google.script.run){
+    return new Promise((ok,no)=>{const r=google.script.run.withSuccessHandler(ok).withFailureHandler(e=>no(new Error(e&&e.message||e)));
+      arg===undefined?r[fn]():r[fn](arg)});
+  }
+  if(!APPS_SCRIPT_URL) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า APPS_SCRIPT_URL'));
+  if(fn==='getInit') return fetch(APPS_SCRIPT_URL+'?action=init').then(r=>r.json());
+  return fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(arg)}).then(r=>r.json());
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function withRetry(fn,arg,n=3){
+  for(let i=1;;i++){try{return await call(fn,arg)}catch(e){if(i>=n)throw e;await sleep(1200*i+Math.random()*1500)}}
+}
+
+/* ---- ตำแหน่ง ---- */
+function dist(a,b,c,d){const R=6371000,t=x=>x*Math.PI/180,dl=t(c-a),dn=t(d-b),h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dn/2)**2;return Math.round(2*R*Math.asin(Math.sqrt(h)))}
+function getGeo(){
+  return new Promise(res=>{
+    if(!navigator.geolocation) return res({state:'unavailable'});
+    let done=false;const fin=v=>{if(!done){done=true;res(v)}};setTimeout(()=>fin({state:'timeout'}),12000);
+    try{navigator.geolocation.getCurrentPosition(p=>{
+      const g={state:'ok',lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)};
+      const v=S.cfg;if(v&&v.lat!=null&&v.lng!=null){g.dist=dist(g.lat,g.lng,v.lat,v.lng);g.inside=g.dist<=v.radius}
+      fin(g)},e=>fin({state:e.code===1?'denied':'unavailable'}),{enableHighAccuracy:true,timeout:10000,maximumAge:0})}
+    catch(e){fin({state:'unavailable'})}
+  });
+}
+
+/* ---- สถานะหน้าเว็บ ---- */
+const S={roster:[],groups:[],cfg:null,loadErr:'',name:'',group:'',newGroup:'',status:'',reason:'',other:'',geo:null,geoBusy:false,busy:false,err:'',sent:null,showSug:false};
+const found=()=>S.roster.find(r=>key(r.n)===key(S.name));
+
+function geoPanel(){
+  const g=S.geo;
+  if(S.geoBusy) return '<div class="panel">กำลังตรวจตำแหน่งจากมือถือ… ถ้ามีหน้าต่างขออนุญาต กด "อนุญาต"</div>';
+  if(!g) return '<div class="panel"><button class="ghost" id="geo" type="button">ตรวจตำแหน่งของฉัน</button></div>';
+  if(g.state==='ok'){
+    if(g.inside===true) return `<div class="panel ok">อยู่ในพื้นที่อบรม (ห่างจุดอบรม ${g.dist} ม.)</div>`;
+    if(g.inside===false) return `<div class="panel warn">ตำแหน่งอยู่นอกพื้นที่อบรม (ห่าง ${g.dist} ม.) ยังส่งได้ ผู้จัดจะตรวจสอบอีกครั้ง</div>`;
+    return '<div class="panel ok">ได้ตำแหน่งแล้ว</div>';
+  }
+  const why=g.state==='denied'?'ไม่ได้อนุญาตการเข้าถึงตำแหน่ง':'เครื่องนี้ให้ตำแหน่งไม่ได้';
+  return `<div class="panel warn">${why} ระบบจะบันทึกว่า "ไม่มีพิกัด" ให้ผู้จัดตรวจสอบ<br><button class="ghost" id="geo" type="button" style="margin-top:8px;min-height:40px">ลองอีกครั้ง</button></div>`;
+}
+function canSend(){
+  const grp=found()?found().g:(S.group===NEW_GROUP?clean(S.newGroup):S.group);
+  if(!clean(S.name)||!grp||!S.status) return false;
+  if(S.status==='ไม่ได้เข้าร่วม'){ if(!S.reason) return false; if(S.reason==='อื่นๆ'&&!clean(S.other)) return false; }
+  return !S.busy;
+}
+function sugHTML(){
+  const k=key(S.name); if(!S.showSug||!k||found()) return '';
+  const l=S.roster.filter(r=>key(r.n).includes(k)).slice(0,8);
+  return l.length?`<div class="sug" id="sug">${l.map((r,i)=>`<button type="button" data-i="${S.roster.indexOf(r)}">${esc(r.n)}<small>${esc(r.g)}</small></button>`).join('')}</div>`:'';
+}
+function view(){
+  if(S.loadErr) return `<section class="card"><div class="panel warn">${esc(S.loadErr)}</div><button class="ghost" id="reload" type="button">ลองใหม่</button></section>`;
+  if(!S.cfg) return '<section class="card"><p class="hint">กำลังโหลดรายชื่อ…</p></section>';
+  if(S.sent){const s=S.sent,att=s.status==='เข้าร่วม';
+    return `<section class="card done"><h2>บันทึกแล้ว</h2><p style="margin:0"><b>${esc(s.name)}</b><br><span class="meta">${esc(s.group)}</span></p>
+    <div class="panel ${att?'ok':'warn'}" style="width:100%">${att?'เข้าร่วม · เวลา '+esc(s.time):'ไม่ได้เข้าร่วม · '+esc(s.reason)}</div>
+    ${att?`<p class="hint" style="margin:0">ตำแหน่ง: ${esc(s.geoResult)}</p>`:''}
+    <button class="ghost" id="again" type="button">แก้ไขข้อมูล</button></section>`;}
+  const f=found(), typed=clean(S.name).length>=2, isNew=typed&&!f;
+  const att=S.status==='เข้าร่วม',no=S.status==='ไม่ได้เข้าร่วม';
+  const gsel=f?f.g:S.group, sug=sugHTML();
+  return `<section class="card">
+   <div><label for="name">ชื่อ-สกุล</label><input id="name" autocomplete="off" placeholder="พิมพ์ชื่อหรือนามสกุลเพื่อค้นหา" value="${esc(S.name)}">
+     ${sug}${f?'<p class="hint ok">พบชื่อในรายชื่อ</p>':isNew&&!sug?'<p class="hint bad">ไม่พบชื่อนี้ในรายชื่อ จะเพิ่มเป็นรายชื่อใหม่ กรุณาเลือกกลุ่ม/ฝ่าย</p>':''}</div>
+   <div><label for="group">กลุ่ม/ฝ่าย</label><select id="group" ${f?'disabled':''}>
+     <option value="">${f?'':'เลือกกลุ่ม/ฝ่าย'}</option>${S.groups.map(g=>`<option ${gsel===g?'selected':''}>${esc(g)}</option>`).join('')}
+     ${f?'':`<option value="${NEW_GROUP}" ${S.group===NEW_GROUP?'selected':''}>+ เพิ่มกลุ่ม/ฝ่ายใหม่</option>`}</select>
+     ${!f&&S.group===NEW_GROUP?`<input id="newgroup" style="margin-top:8px" placeholder="ชื่อกลุ่ม/ฝ่ายใหม่" value="${esc(S.newGroup)}">`:''}</div>
+   <div><span class="lbl">สถานะ</span><div class="seg">
+     <input type="radio" name="st" id="st1" value="เข้าร่วม" ${att?'checked':''}><label for="st1">เข้าร่วม</label>
+     <input type="radio" name="st" id="st2" value="ไม่ได้เข้าร่วม" ${no?'checked':''}><label for="st2">ไม่ได้เข้าร่วม</label></div></div>
+   ${att?`<div><div class="panel">เวลาตอนนี้ <b id="clock">${esc(fmt(new Date()))}</b><br><span class="hint">ระบบบันทึกเวลาเข้าร่วมตามเวลาที่กดส่ง</span></div><div style="margin-top:8px">${geoPanel()}</div></div>`:''}
+   ${no?`<div><label for="reason">ไม่ได้เข้าร่วมเนื่องจาก</label><select id="reason"><option value="">เลือกเหตุผล</option>${REASONS.map(r=>`<option ${S.reason===r?'selected':''}>${r}</option>`).join('')}</select>
+     ${S.reason==='อื่นๆ'?`<input id="other" style="margin-top:8px" placeholder="ระบุเหตุผล" value="${esc(S.other)}">`:''}</div>`:''}
+   ${S.err?`<p class="err">${esc(S.err)}</p>`:''}
+   <button class="main" id="send" type="button" ${canSend()?'':'disabled'}>${S.busy?'กำลังบันทึก…':'ส่ง'}</button></section>`;
+}
+function render(focusId){
+  $('#title').textContent=S.cfg?S.cfg.title:'เช็คชื่อผู้เข้าอบรม';$('#when').textContent=S.cfg?S.cfg.when:'';
+  document.title=S.cfg?S.cfg.title:'เช็คชื่อผู้เข้าอบรม';
+  $('#view').innerHTML=view();bind();
+  if(focusId){const el=$('#'+focusId);if(el){el.focus();try{const n=el.value.length;el.setSelectionRange(n,n)}catch(e){}}}
+}
+function syncSend(){const b=$('#send');if(b)b.disabled=!canSend()}
+function bind(){
+  $('#reload')&&($('#reload').onclick=load);
+  $('#again')&&($('#again').onclick=()=>{S.sent=null;render()});
+  const n=$('#name');if(!n)return;
+  n.oninput=e=>{S.name=e.target.value;S.showSug=true;S.err='';if(found())S.group='';render('name')};
+  document.querySelectorAll('#sug button').forEach(b=>b.onmousedown=b.onclick=e=>{e.preventDefault();S.name=S.roster[+b.dataset.i].n;S.showSug=false;render()});
+  $('#group').onchange=e=>{S.group=e.target.value;render()};
+  $('#newgroup')&&($('#newgroup').oninput=e=>{S.newGroup=e.target.value;syncSend()});
+  document.querySelectorAll('input[name=st]').forEach(r=>r.onchange=()=>{S.status=r.value;S.showSug=false;if(S.status==='เข้าร่วม'&&!S.geo)doGeo();render()});
+  $('#reason')&&($('#reason').onchange=e=>{S.reason=e.target.value;render()});
+  $('#other')&&($('#other').oninput=e=>{S.other=e.target.value;syncSend()});
+  $('#geo')&&($('#geo').onclick=doGeo);
+  $('#send').onclick=send;
+}
+async function doGeo(){S.geoBusy=true;render();S.geo=await getGeo();S.geoBusy=false;render()}
+async function send(){
+  if(!canSend())return;S.busy=true;S.err='';render();
+  const f=found(),att=S.status==='เข้าร่วม';
+  const group=f?f.g:(S.group===NEW_GROUP?clean(S.newGroup):S.group);
+  const payload={name:f?f.n:clean(S.name),group,status:S.status,reason:S.reason,other:S.other,
+    geo:att?(S.geo?{state:S.geo.state,lat:S.geo.lat,lng:S.geo.lng,acc:S.geo.acc}:{state:'unavailable'}):null};
+  try{
+    const r=await withRetry('submit',payload);
+    if(r&&r.ok===false)throw new Error(r.error||'บันทึกไม่สำเร็จ');
+    S.sent={name:payload.name,group,status:S.status,time:r.time,geoResult:r.geoResult,reason:S.status==='เข้าร่วม'?'':(S.reason==='อื่นๆ'?'อื่นๆ: '+clean(S.other):S.reason)};
+    if(!f&&!S.roster.some(x=>key(x.n)===key(payload.name))){S.roster.push({n:payload.name,g:group});if(!S.groups.includes(group))S.groups.push(group)}
+  }catch(e){S.err=(e&&e.message)||'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง'}
+  S.busy=false;render();
+}
+async function load(){
+  S.loadErr='';render();
+  try{const d=await withRetry('getInit');S.roster=d.roster||[];S.groups=d.groups||[];S.cfg=d.config||{title:'การอบรม',when:''}}
+  catch(e){S.loadErr='โหลดรายชื่อไม่สำเร็จ: '+((e&&e.message)||'')}
+  render();
+}
+setInterval(()=>{const c=$('#clock');if(c)c.textContent=fmt(new Date())},1000);
+render();load();
+</script></body></html>
